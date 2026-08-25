@@ -3,7 +3,7 @@
 	<information>
 		<name>KindleFetch</name>
 		<version>1.0</version>
-		<author>justrals</author>
+		<author>joelstitch (fork of justrals/KindleFetch)</author>
 		<id>kindlefetch</id>
 	</information>
 	<menus>

@@ -1,8 +1,8 @@
 #!/bin/sh
 
 # KindleFetch
-# Made by justrals
-# https://github.com/justrals/KindleFetch
+# Made by justrals (https://github.com/justrals/KindleFetch)
+# Fork maintained at https://github.com/joelstitch/KindleFetch
 
 # Variables
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
@@ -74,7 +74,7 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-$(load_version) | https://github.com/justrals/KindleFetch
+$(load_version) | https://github.com/joelstitch/KindleFetch
 "
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 6 to install."

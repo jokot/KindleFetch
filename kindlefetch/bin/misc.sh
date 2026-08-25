@@ -131,10 +131,8 @@ load_version() {
     if [ -f "$VERSION_FILE" ]; then
         cat "$VERSION_FILE"
     else
-        echo "Version file wasn't found!"
-        sleep 2
-        echo "Creating version file"
-        sleep 2
+        # Quietly create the file. The old flow printed two lines and slept 4s
+        # on every fresh install, which read like an error on the main screen.
         get_version
     fi
 }
@@ -172,7 +170,9 @@ get_version() {
     local api_response
     api_response="$(curl -s --max-time 10 -A "$USER_AGENT" \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits")" || {
+        "https://api.github.com/repos/joelstitch/KindleFetch/commits")" || {
+        # Sent to stderr only, so a Kindle that cannot reach the API does not
+        # get three lines of noise on the main screen.
         echo "Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return
@@ -190,7 +190,7 @@ check_for_updates() {
     local latest_sha="$(curl -s --max-time 10 -A "$USER_AGENT" \
         -H "Accept: application/vnd.github.v3+json" \
         -H "Cache-Control: no-cache" \
-        "https://api.github.com/repos/justrals/KindleFetch/commits?per_page=1" | \
+        "https://api.github.com/repos/joelstitch/KindleFetch/commits?per_page=1" | \
         grep -o -E '"sha": "[0-9a-f]+"' | head -1 | cut -d'"' -f4 | cut -c1-7)"
     
     if [ -n "$latest_sha" ] && [ "$current_sha" != "$latest_sha" ]; then

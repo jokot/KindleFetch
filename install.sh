@@ -14,8 +14,8 @@ if ! { [ -f "/etc/prettyversion.txt" ] || [ -d "/mnt/us" ] || pgrep "lipc-daemon
 fi
 
 # Variables
-API_URL="https://api.github.com/repos/justrals/KindleFetch/commits"
-REPO_URL="https://github.com/justrals/KindleFetch/archive/refs/heads/main.zip"
+API_URL="https://api.github.com/repos/joelstitch/KindleFetch/commits"
+REPO_URL="https://github.com/joelstitch/KindleFetch/archive/refs/heads/main.zip"
 ZIP_FILE="/mnt/us/repo.zip"
 EXTRACTED_DIR="/mnt/us/KindleFetch-main"
 INSTALL_DIR="/mnt/us/extensions/kindlefetch"
@@ -26,7 +26,11 @@ TEMP_ZLIB_COOKIES_FILE="/mnt/us/zlib_cookies.txt"
 VERSION_FILE="$INSTALL_DIR/bin/.version"
 
 get_version() {
-    api_response=$(curl -s -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
+    # GitHub rejects anonymous requests with no User-Agent; a timeout keeps a
+    # dead network from hanging the install.
+    api_response=$(curl -s --max-time 15 \
+        -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" \
+        -H "Accept: application/vnd.github.v3+json" "$API_URL") || {
         echo "Warning: Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return
@@ -50,7 +54,7 @@ if [ -f "$ZLIB_COOKIES_FILE" ]; then
 fi
 
 echo "Downloading KindleFetch..."
-curl -s -L -o "$ZIP_FILE" "$REPO_URL"
+curl -s -L --max-time 120 -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" -o "$ZIP_FILE" "$REPO_URL"
 echo "Download complete."
 
 echo "Extracting files..."

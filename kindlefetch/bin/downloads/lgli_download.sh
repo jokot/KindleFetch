@@ -58,27 +58,52 @@ lgli_download() {
     fi
 
     printf '\nFetching download page...\n'
-    if ! local lgli_content="$(curl -s -L "$LGLI_URL/ads.php?md5=$md5")"; then
-        echo "Failed to fetch book page" >&2
+
+    # `if ! local x="$(...)"` tested the exit status of `local`, not of the
+    # command substitution, so neither of the old checks here could ever fire.
+    #
+    # The mirror that served the search will not necessarily serve this page -
+    # Libgen hosts answer inconsistently - so walk the candidates instead of
+    # giving up on the first miss.
+    local page="$TMP_DIR/.kf_search.$$dl"
+    local mirror served=""
+    for mirror in $LGLI_URL $LGLI_MIRROR_URLS; do
+        [ -n "$mirror" ] || continue
+        if http_fetch "$page" "$mirror/ads.php?md5=$md5" --max-time 20 \
+           && grep -q 'get\.php' "$page" 2>/dev/null; then
+            served="$mirror"
+            break
+        fi
+    done
+
+    if [ -z "$served" ]; then
+        rm -f "$page"
+        echo "Could not fetch a download page for this book (${NET_FAIL_STAGE:-no link found})." >&2
         return 1
     fi
-    
-    if ! local download_link="$(echo "$lgli_content" | grep -o -m 1 'href="[^"]*get\.php[^"]*"' | cut -d'"' -f2)"; then
-        echo "Failed to parse download link" >&2
-        return 1
-    fi
-    
+
+    local download_link
+    download_link="$(grep -o 'href="[^"]*get\.php[^"]*"' "$page" 2>/dev/null | head -1 | cut -d'"' -f2)"
+    rm -f "$page"
+
     if [ -z "$download_link" ]; then
         echo "No download link found" >&2
         return 1
     fi
 
-    local download_url="$LGLI_URL/$download_link"
+    # Mirrors emit this link absolute, root-relative or bare; the old code
+    # always glued it on with a slash, producing a double slash for the second.
+    local download_url
+    case "$download_link" in
+        http*) download_url="$download_link" ;;
+        /*)    download_url="$served$download_link" ;;
+        *)     download_url="$served/$download_link" ;;
+    esac
     echo "Downloading from: $download_url"
-    
+
     printf '\nProgress (Press Ctrl + c to stop):\n'
 
-    if curl -# -L -o "$final_location" "$download_url"; then
+    if curl -# -L --max-time 900 -A "$USER_AGENT" -o "$final_location" "$download_url"; then
         printf '\nDownload successful!\n'
         echo "Saved to: $final_location"
         return 0

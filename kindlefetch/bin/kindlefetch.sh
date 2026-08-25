@@ -32,6 +32,7 @@ fi
 # Script imports
 . "$SCRIPT_DIR/downloads/zlib_download.sh"
 . "$SCRIPT_DIR/downloads/lgli_download.sh"
+. "$SCRIPT_DIR/downloads/lgli_search.sh"
 . "$SCRIPT_DIR/filters.sh"
 . "$SCRIPT_DIR/search.sh"
 . "$SCRIPT_DIR/misc.sh"
@@ -43,9 +44,18 @@ fi
 check_for_updates
 load_config
 
-[ -z "$ANNAS_URL" ] && ANNAS_URL=$(find_working_url $ANNAS_MIRROR_URLS)
-[ -z "$LGLI_URL" ] && LGLI_URL=$(find_working_url $LGLI_MIRROR_URLS)
-[ -z "$ZLIB_URL" ] && ZLIB_URL=$(find_working_url $ZLIB_MIRROR_URLS)
+# Pull live mirror status from open-slum.org and reorder the candidate lists so
+# that mirrors which are actually up are tried first. Silent no-op when it is
+# unreachable - the baked-in link_config lists stay in force.
+refresh_mirror_lists
+
+# Only seed a starting candidate here. Mirror selection proper happens lazily
+# at search time: lgli_search walks the whole candidate list itself and keeps
+# whichever host answers, so probing every mirror during startup would add tens
+# of seconds before the menu appears and still be stale by the next search.
+[ -z "$ANNAS_URL" ] && ANNAS_URL="$(first_url $ANNAS_MIRROR_URLS)"
+[ -z "$LGLI_URL" ] && LGLI_URL="$(first_url $LGLI_MIRROR_URLS)"
+[ -z "$ZLIB_URL" ] && ZLIB_URL="$(first_url $ZLIB_MIRROR_URLS)"
 
 save_config
 

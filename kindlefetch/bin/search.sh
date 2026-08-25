@@ -64,6 +64,50 @@ display_books() {
     echo ""
 }
 
+# Explain why a search produced nothing.
+#
+# Upstream printed an empty list whether the fetch failed, a challenge page came
+# back, or the query genuinely had no matches - which is why the "no results"
+# bug reports were never actionable. Naming the stage costs nothing and makes
+# the next report diagnosable.
+search_report_failure() {
+    local q="$1"
+    echo ""
+    case "${NET_FAIL_STAGE:-empty}" in
+        dns)
+            echo "Search failed: could not resolve any mirror."
+            echo "Check the Wi-Fi connection, or try Settings > Toggle Cloudflare DNS."
+            ;;
+        tls)
+            echo "Search failed: the TLS handshake was rejected."
+            echo "This device's certificate bundle is probably too old for these sites."
+            ;;
+        timeout)
+            echo "Search failed: every mirror timed out."
+            ;;
+        challenge)
+            echo "Search failed: the mirrors answered with a bot-protection challenge"
+            echo "(DDoS-Guard / Cloudflare) that this tool cannot solve."
+            ;;
+        nginx-default)
+            echo "Search failed: mirrors returned a placeholder page instead of Library Genesis."
+            echo "This is a mirror-side fault; trying again usually reaches a working one."
+            ;;
+        http-*)
+            echo "Search failed: mirror returned HTTP ${NET_FAIL_STAGE#http-}."
+            ;;
+        empty)
+            echo "No results returned for '$q'."
+            echo "Libgen mirrors answer inconsistently, so searching again often works."
+            ;;
+        *)
+            echo "Search failed: $NET_FAIL_STAGE"
+            ;;
+    esac
+    echo ""
+    sleep 3
+}
+
 search_books() {
     local query="$1"
     local page="${2:-1}"
@@ -84,12 +128,41 @@ search_books() {
         filters=$(cat "$SCRIPT_DIR/tmp/current_filter_params")
     fi
     
-    local encoded_query=$(echo "$query" | sed 's/ /+/g')
-    local search_url="$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}"
-    local html_content="$(curl -s "$search_url") || html_content=$(curl -s -x "$PROXY_URL" "$search_url")"
+    local encoded_query="$(urlencode "$query")"
+    local html_file="$TMP_DIR/.kf_search.$$"
+    local source_kind=""
+
+    # Libgen first: it is the only one of the three sources that answers curl
+    # with real content. Anna's Archive returns 403 (DDoS-Guard) on /search from
+    # every known mirror, even though its homepage answers 200 - which is what
+    # made this look like "no results" rather than a network failure.
+    if lgli_search "$encoded_query" "$page" "$html_file"; then
+        source_kind="lgli"
+        # lgli_search sets LGLI_URL to whichever mirror answered; remember it so
+        # the next launch starts from a host known to have worked.
+        save_config
+    elif [ -n "$ANNAS_URL" ]; then
+        # A long shot while the block is in place, but it costs one request and
+        # means the app starts working again by itself if that ever changes.
+        echo "Libgen returned nothing; trying Anna's Archive..."
+        if http_fetch "$html_file" \
+                "$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}" --max-time 12 \
+           && ! is_junk_response "$html_file" \
+           && grep -Fq 'href="/md5/' "$html_file" 2>/dev/null; then
+            source_kind="annas"
+        elif [ -z "$NET_FAIL_STAGE" ]; then
+            NET_FAIL_STAGE="challenge"
+        fi
+    fi
+
+    if [ -z "$source_kind" ]; then
+        rm -f "$html_file"
+        search_report_failure "$query"
+        return 1
+    fi
     
-    local last_page="$(echo "$html_content" | grep -o 'page=[0-9]\+"' | sort -t= -k2 -nr | head -1 | cut -d= -f2 | tr -d '"')"
-    [ -z "$last_page" ] && last_page=1
+    local last_page
+    last_page="$(lgli_last_page "$html_file")"
     
     local has_prev=false
     [ "$page" -gt 1 ] && has_prev=true
@@ -103,7 +176,13 @@ search_books() {
     echo "$has_next" > "$TMP_DIR"/last_search_has_next
     echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
     
-    local books="$(echo $html_content | awk '
+    local books
+    if [ "$source_kind" = "lgli" ]; then
+        books="$(lgli_parse_results "$html_file" "$LGLI_URL")"
+    else
+        # Reading from the file rather than `echo $html_content`: unquoted, that
+        # word-split and glob-expanded the entire HTML document.
+        books="$(awk -v base_url="$ANNAS_URL" '
         BEGIN {
             RS = "<div class=\"flex pt-3 pb-3 border-b last:border-b-0 border-gray-100\">"
             print "["
@@ -112,9 +191,11 @@ search_books() {
         NR > 1 {
             title = ""; author = ""; md5 = ""; format = ""; description = ""
         
-            # md5
-            if (match($0, /href="\/md5\/[a-f0-9]{32}"/)) {
-                md5 = substr($0, RSTART+11, 32)
+            # md5. Avoids the /{32}/ interval form, which mawk and some
+            # busybox builds do not support and silently fail to match.
+            if (match($0, /href="\/md5\/[a-f0-9]+"/)) {
+                md5 = substr($0, RSTART+11, RLENGTH-12)
+                if (length(md5) != 32) md5 = ""
             }
         
             # title
@@ -177,14 +258,16 @@ search_books() {
                 if (count > 0) {
                     printf ",\n"
                 }
-                printf "  {\"author\": \"%s\", \"format\": \"%s\", \"md5\": \"%s\", \"title\": \"%s\", \"url\": \"%s/md5/%s\", \"description\": \"%s\"}", author, format, md5, title, base_url, md5, description
+                printf "  {\"author\": \"%s\", \"format\": \"%s\", \"md5\": \"%s\", \"title\": \"%s\", \"url\": \"%s/md5/%s\", \"description\": \"%s\", \"source\": \"annas\"}", author, format, md5, title, base_url, md5, description
                 count++
             }
         }
         END {
             print "\n]"
-        }'
-    )"
+        }' "$html_file")"
+    fi
+
+    rm -f "$html_file"
     
     echo "$books" > "$TMP_DIR"/search_results.json
 
@@ -275,12 +358,21 @@ search_books() {
                         local lgli_available=false
                         local zlib_available=false
 
-                        if echo "$book_info" | grep -q "lgli"; then
-                            lgli_available=true
-                        fi
-                        if echo "$book_info" | grep -q "zlib"; then
-                            zlib_available=true
-                        fi
+                        # Route on the record's own source field. The previous
+                        # substring test looked for "lgli"/"zlib" anywhere in the
+                        # record, which no Libgen record ever contains - so no
+                        # result could reach a downloader at all.
+                        case "$book_info" in
+                            *'"source": "lgli"'*)
+                                lgli_available=true
+                                ;;
+                            *'"source": "annas"'*)
+                                # An Anna's record is a content hash, which the
+                                # Libgen downloader can resolve directly.
+                                lgli_available=true
+                                [ "$ZLIB_AVAILABLE" = true ] && zlib_available=true
+                                ;;
+                        esac
 
                         while true; do
                             if [ "$lgli_available" = false ] && [ "$zlib_available" = false ]; then
@@ -381,8 +473,10 @@ search_books() {
                             esac
                         done
 
-                        printf "\nPress any key to continue..."
-                        read -n 1 -s
+                        # busybox read supports neither -n nor -s, so upstream's
+                        # `read -n 1 -s` fails with "invalid option" on-device.
+                        printf "\nPress Enter to continue..."
+                        read -r _continue
                     else
                         echo "Invalid selection (must be between 1 and $items_on_page)"
                         sleep 2

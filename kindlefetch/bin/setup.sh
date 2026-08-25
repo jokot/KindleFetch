@@ -33,7 +33,9 @@ first_time_setup() {
     if [ "$zlib_login_choice" = "n" ] || [ "$zlib_login_choice" = "N" ]; then
         ZLIB_AUTH=false
     else
-        [ -z "$ZLIB_URL" ] && ZLIB_URL=$(find_working_url $ZLIB_MIRROR_URLS)
+        # Seed a candidate only. Probing every mirror here would stall first-run
+        # setup, and zlib_login reports precisely why a mirror failed anyway.
+        [ -z "$ZLIB_URL" ] && ZLIB_URL="$(first_url $ZLIB_MIRROR_URLS)"
         save_config
 
         while true; do

@@ -16,7 +16,8 @@ zlib_download() {
     
     local md5="$(get_json_value "$book_info" "md5")"
 
-    local final_url="$(curl -s -L -o /dev/null -w "%{url_effective}" "$ZLIB_URL/md5/$md5")"
+    local final_url="$(curl -s -L --max-time 20 -A "$USER_AGENT" \
+        -o /dev/null -w "%{url_effective}" "$ZLIB_URL/md5/$md5")"
 
     local book_id="$(echo "$final_url" | sed -n 's#.*/book/\([0-9][0-9]*\)/[a-z0-9]\+#\1#p')"
     local book_hash="$(echo "$final_url" | sed -n 's#.*/book/[0-9][0-9]*/\([a-z0-9]\+\).*#\1#p')"
@@ -26,10 +27,24 @@ zlib_download() {
         return 1
     fi
 
-    local response="$(curl -s -b "$ZLIB_COOKIES_FILE" \
-        -H "Accept: application/json" \
-        -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64)" \
-        "$ZLIB_URL/eapi/book/$book_id/$book_hash/file")"
+    local respfile="$TMP_DIR/.kf_zlogin.$$dl"
+    if ! http_fetch "$respfile" "$ZLIB_URL/eapi/book/$book_id/$book_hash/file" \
+            --max-time 25 -b "$ZLIB_COOKIES_FILE" -H "Accept: application/json"; then
+        zlib_report_block "$NET_FAIL_STAGE"
+        rm -f "$respfile"
+        return 1
+    fi
+
+    # A challenge page here is why upstream reported "Failed to get download
+    # link" - the request never reached the API at all.
+    if is_junk_response "$respfile" || ! grep -Fq '{' "$respfile" 2>/dev/null; then
+        zlib_report_block "challenge"
+        rm -f "$respfile"
+        return 1
+    fi
+
+    local response="$(cat "$respfile")"
+    rm -f "$respfile"
 
     local ddl="$(get_json_value "$response" "downloadLink" | sed 's#\\\/#/#g' | tr -d '\r\n')"
     local title="$(get_json_value "$response" "description" | tr -d '\r\n')"
@@ -55,7 +70,8 @@ zlib_download() {
         echo "Proceeding with original filename."
     fi
 
-    local file_size="$(curl -sI "$ddl" | awk '/Content-Length/ {printf "%.2f MB\n", $2/1048576}')"
+    local file_size="$(curl -sI --max-time 20 -A "$USER_AGENT" "$ddl" \
+        | awk '/Content-Length/ {printf "%.2f MB\n", $2/1048576}')"
     local filename="$(sanitize_filename "${title}.${ext}")"
     local filename="${filename:-book.bin}"
     
@@ -84,7 +100,8 @@ zlib_download() {
     printf "\nBook: $title\nExtension: $ext\nFile size: $file_size\nMD5: $md5\n"
     printf "\nProgress (Press Ctrl + c to stop):\n"
 
-    if curl -L --progress-bar -b "$ZLIB_COOKIES_FILE" -o "$final_location" "$ddl"; then
+    if curl -L --progress-bar --max-time 600 -A "$USER_AGENT" \
+            -b "$ZLIB_COOKIES_FILE" -o "$final_location" "$ddl"; then
         printf "\nDownload successful!\n"
         echo "Saved to: $final_location"
         return 0

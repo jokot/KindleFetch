@@ -16,7 +16,8 @@ settings_menu() {
         echo ""
         echo "Current configuration:"
         echo "1. Documents directory: $KINDLE_DOCUMENTS"
-        if [[ "$ZLIB_AUTH" == "true" ]]; then
+        # [[ ]] is a bashism; busybox ash on the Kindle only has [ ].
+        if [ "$ZLIB_AUTH" = "true" ]; then
             echo "2. Re-log into zlib account. Currently logged-in as $ZLIB_USERNAME"
         else
             echo "2. Sign into zlib account"
@@ -32,6 +33,7 @@ settings_menu() {
         echo "   Library Genesis - ${LGLI_URL}"
         echo "   ZLibrary - ${ZLIB_URL}"
         echo "8. Change URLs"
+        echo "9. Network diagnostics"
         echo ""
         echo "q. Back to main menu"
         echo ""
@@ -137,7 +139,7 @@ settings_menu() {
                         echo -n "Enter new URL for Anna's Archive: "
                         read -r new_annas_url
 
-                        working_url=$(find_working_url "$new_annas_url")
+                        working_url=$(pick_working_url annas "$new_annas_url")
                         if [ -z "$working_url" ]; then
                             echo "Failed to connect to ${new_annas_url}."
                             echo -n "Are you sure you want to set this URL anyway? [y/N]: "
@@ -160,7 +162,7 @@ settings_menu() {
                         echo -n "Enter new URL for Library Genesis: "
                         read -r new_lgli_url
 
-                        working_url=$(find_working_url "$new_lgli_url")
+                        working_url=$(pick_working_url lgli "$new_lgli_url")
                         if [ -z "$working_url" ]; then
                             echo "Failed to connect to ${new_lgli_url}."
                             echo -n "Are you sure you want to set this URL anyway? [y/N]: "
@@ -183,7 +185,7 @@ settings_menu() {
                         echo -n "Enter new URL for ZLibrary: "
                         read -r new_zlib_url
 
-                        working_url=$(find_working_url "$new_zlib_url")
+                        working_url=$(pick_working_url zlib "$new_zlib_url")
                         if [ -z "$working_url" ]; then
                             echo "Failed to connect to ${new_zlib_url}."
                             echo -n "Are you sure you want to set this URL anyway? [y/N]: "
@@ -210,6 +212,9 @@ settings_menu() {
                         sleep 2
                         ;;
                 esac
+                ;;
+            9)
+                run_diagnostics
                 ;;
             [qQ])
                 break

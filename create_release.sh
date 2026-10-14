@@ -6,7 +6,7 @@ rm kindlefetch/bin/.version
 
 
 get_version() {
-    api_response=$(curl -s -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/joelstitch/KindleFetch/commits") || {
+    api_response=$(curl -s -A "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/repos/jokot/KindleFetch/commits") || {
         echo "Warning: Failed to fetch version from GitHub API" >&2
         echo "unknown"
         return

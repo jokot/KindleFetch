@@ -170,7 +170,7 @@ get_version() {
     local api_response
     api_response="$(curl -s --max-time 10 -A "$USER_AGENT" \
         -H "Accept: application/vnd.github.v3+json" \
-        "https://api.github.com/repos/joelstitch/KindleFetch/commits")" || {
+        "https://api.github.com/repos/jokot/KindleFetch/commits")" || {
         # Sent to stderr only, so a Kindle that cannot reach the API does not
         # get three lines of noise on the main screen.
         echo "Failed to fetch version from GitHub API" >&2
@@ -190,7 +190,7 @@ check_for_updates() {
     local latest_sha="$(curl -s --max-time 10 -A "$USER_AGENT" \
         -H "Accept: application/vnd.github.v3+json" \
         -H "Cache-Control: no-cache" \
-        "https://api.github.com/repos/joelstitch/KindleFetch/commits?per_page=1" | \
+        "https://api.github.com/repos/jokot/KindleFetch/commits?per_page=1" | \
         grep -o -E '"sha": "[0-9a-f]+"' | head -1 | cut -d'"' -f4 | cut -c1-7)"
     
     if [ -n "$latest_sha" ] && [ "$current_sha" != "$latest_sha" ]; then
@@ -299,6 +299,17 @@ zlib_login() {
     return 1
 }
 
+# Every cookie the login stored, as a single Cookie header value, whatever
+# domain it was stored under. In the Netscape jar format the name and value are
+# the sixth and seventh fields; HttpOnly entries carry a "#HttpOnly_" prefix on
+# the domain, so they must not be skipped as comments.
+zlib_auth_cookie() {
+    awk -F '\t' '
+        /^# / || NF < 7 { next }
+        { printf "%s%s=%s", sep, $6, $7; sep = "; " }
+    ' "$ZLIB_COOKIES_FILE" 2>/dev/null
+}
+
 # Report what this device can actually reach.
 #
 # Upstream's bug reports were almost all "search returns nothing" with no way to
@@ -318,15 +329,23 @@ run_diagnostics() {
     for label in "open-slum|https://open-slum.org/" \
                  "libgen|$LGLI_URL/index.php?req=bible" \
                  "annas|$ANNAS_URL/search?q=bible" \
-                 "zlib|$ZLIB_URL/"; do
+                 "zlib|$ZLIB_URL/eapi/book/search"; do
         target="${label#*|}"
         case "$target" in
             ''|'/'*) continue ;;
         esac
 
+        # Z-Library is checked through the app API search, which is what the
+        # search actually uses; its website is behind DiamWall regardless.
+        if [ "${label%%|*}" = "zlib" ]; then
+            set -- -X POST -d "message=bible&limit=1" --max-redirs 3
+        else
+            set --
+        fi
+
         echo "${label%%|*}: $target"
-        if http_fetch "$t" "$target" --max-time 10; then
-            if grep -Fq 'ads.php?md5=' "$t" 2>/dev/null; then
+        if http_fetch "$t" "$target" --max-time 10 "$@"; then
+            if grep -Fq -e 'ads.php?md5=' -e '"books":[{' "$t" 2>/dev/null; then
                 echo "   OK - real results ($(wc -c < "$t") bytes)"
             elif grep -Fq 'status-badge compact' "$t" 2>/dev/null; then
                 echo "   OK - status page ($(wc -c < "$t") bytes)"
@@ -372,13 +391,20 @@ probe_mirror() {
     case "$kind" in
         lgli)  url="$base/index.php?req=bible" ; marker='ads.php?md5=' ;;
         annas) url="$base/search?q=bible"      ; marker='href="/md5/' ;;
-        zlib)  url="$base/"                    ; marker='' ;;
+        zlib)  url="$base/eapi/book/search"    ; marker='"books":[{' ;;
         *)     NET_FAIL_STAGE="unknown-kind"   ; return 1 ;;
     esac
 
+    # The Z-Library API only answers search as a POST.
+    if [ "$kind" = "zlib" ]; then
+        set -- -X POST -d "message=bible&limit=1" --max-redirs 3
+    else
+        set --
+    fi
+
     tmp="$TMP_DIR/.kf_probe.$$"
 
-    if ! http_fetch "$tmp" "$url" --max-time 8; then
+    if ! http_fetch "$tmp" "$url" --max-time 8 "$@"; then
         rm -f "$tmp"
         return 1
     fi
@@ -505,8 +531,11 @@ refresh_mirror_lists() {
 
     [ -n "$pairs" ] || return 1
 
+    # Z-Library is left in link_config order. open-slum checks its website,
+    # which is PROTECTED on every mirror, and says nothing about the app API
+    # that search uses - which works on some of those mirrors and not others.
     local svc list st existing u
-    for svc in annas libgen zlibrary; do
+    for svc in annas libgen; do
         list=""
         for st in up protected degraded; do
             list="$list $(printf '%s\n' "$pairs" | awk -v s="$svc" -v t="$st" \
@@ -522,7 +551,6 @@ refresh_mirror_lists() {
         case "$svc" in
             annas)    existing="$ANNAS_MIRROR_URLS" ;;
             libgen)   existing="$LGLI_MIRROR_URLS" ;;
-            zlibrary) existing="$ZLIB_MIRROR_URLS" ;;
         esac
 
         # Append any baked-in mirror open-slum did not rank, rather than
@@ -539,7 +567,6 @@ refresh_mirror_lists() {
         case "$svc" in
             annas)    ANNAS_MIRROR_URLS="$list" ;;
             libgen)   LGLI_MIRROR_URLS="$list" ;;
-            zlibrary) ZLIB_MIRROR_URLS="$list" ;;
         esac
     done
 

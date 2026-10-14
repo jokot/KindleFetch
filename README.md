@@ -29,7 +29,7 @@ If it's not, follow [this guide](https://kindlemodding.org/) first.
 
 2. **Run the installation command** in kterm:
    ```bash
-   curl -s -L https://raw.githubusercontent.com/joelstitch/KindleFetch/main/install.sh | sh
+   curl -s -L https://raw.githubusercontent.com/jokot/KindleFetch/main/install.sh | sh
    ```
 
 3. **Complete the setup**:
@@ -39,7 +39,7 @@ If it's not, follow [this guide](https://kindlemodding.org/) first.
      
 ### Manual Installation
 
-1. **Download** the latest release from the [**Releases**](https://github.com/joelstitch/KindleFetch/releases) tab
+1. **Download** the latest release from the [**Releases**](https://github.com/jokot/KindleFetch/releases) tab
 
 2. **Unzip** it and move its contents into the `extensions` folder in the root directory of your **Kindle**
    - You should now see a new "KindleFetch" option in KUAL

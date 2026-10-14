@@ -15,23 +15,51 @@ zlib_download() {
     fi
     
     local md5="$(get_json_value "$book_info" "md5")"
+    local book_id="$(get_json_value "$book_info" "id")"
+    local book_hash="$(get_json_value "$book_info" "hash")"
 
-    local final_url="$(curl -s -L --max-time 20 -A "$USER_AGENT" \
-        -o /dev/null -w "%{url_effective}" "$ZLIB_URL/md5/$md5")"
-
-    local book_id="$(echo "$final_url" | sed -n 's#.*/book/\([0-9][0-9]*\)/[a-z0-9]\+#\1#p')"
-    local book_hash="$(echo "$final_url" | sed -n 's#.*/book/[0-9][0-9]*/\([a-z0-9]\+\).*#\1#p')"
-
+    # Z-Library search results already carry the id and hash. Only records from
+    # the other sources need this lookup, which goes through the website and so
+    # is behind DiamWall.
     if [ -z "$book_id" ] || [ -z "$book_hash" ]; then
-        echo "Failed to extract book info from URL: $final_url" >&2
-        return 1
+        local final_url="$(curl -s -L --max-time 20 -A "$USER_AGENT" \
+            -o /dev/null -w "%{url_effective}" "$ZLIB_URL/md5/$md5")"
+
+        book_id="$(echo "$final_url" | sed -n 's#.*/book/\([0-9][0-9]*\)/[a-z0-9]\+#\1#p')"
+        book_hash="$(echo "$final_url" | sed -n 's#.*/book/[0-9][0-9]*/\([a-z0-9]\+\).*#\1#p')"
+
+        if [ -z "$book_id" ] || [ -z "$book_hash" ]; then
+            echo "Failed to extract book info from URL: $final_url" >&2
+            return 1
+        fi
+    fi
+
+    # The login cookies are scoped to the mirror the login went through, which
+    # need not be the one search settled on. The API accepts them on every
+    # mirror, so send them explicitly instead of relying on domain matching.
+    local auth_cookie="$(zlib_auth_cookie)"
+    local cookie_opt="-b" cookie_val="$ZLIB_COOKIES_FILE"
+    if [ -n "$auth_cookie" ]; then
+        cookie_opt="-H"
+        cookie_val="Cookie: $auth_cookie"
     fi
 
     local respfile="$TMP_DIR/.kf_zlogin.$$dl"
     if ! http_fetch "$respfile" "$ZLIB_URL/eapi/book/$book_id/$book_hash/file" \
-            --max-time 25 -b "$ZLIB_COOKIES_FILE" -H "Accept: application/json"; then
-        zlib_report_block "$NET_FAIL_STAGE"
+            --max-time 25 --max-redirs 3 "$cookie_opt" "$cookie_val" \
+            -H "Accept: application/json"; then
+        # The API reports an expired login or a spent daily limit as a JSON
+        # error with a 4xx status. That is not a block, so show its message.
+        local api_error="$(get_json_value "$(cat "$respfile" 2>/dev/null)" "error")"
         rm -f "$respfile"
+        if [ -n "$api_error" ]; then
+            echo "Z-Library: $api_error" >&2
+            case "$api_error" in
+                *[Ll]ogin*) echo "Log in again from Settings > 2." >&2 ;;
+            esac
+        else
+            zlib_report_block "$NET_FAIL_STAGE"
+        fi
         return 1
     fi
 

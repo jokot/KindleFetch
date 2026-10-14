@@ -2,7 +2,8 @@
 
 # KindleFetch
 # Made by justrals (https://github.com/justrals/KindleFetch)
-# Fork maintained at https://github.com/joelstitch/KindleFetch
+# Fork maintained at https://github.com/jokot/KindleFetch
+# (builds on joelstitch/KindleFetch)
 
 # Variables
 SCRIPT_DIR=$(dirname "$(readlink -f "$0")")
@@ -33,6 +34,7 @@ fi
 . "$SCRIPT_DIR/downloads/zlib_download.sh"
 . "$SCRIPT_DIR/downloads/lgli_download.sh"
 . "$SCRIPT_DIR/downloads/lgli_search.sh"
+. "$SCRIPT_DIR/downloads/zlib_search.sh"
 . "$SCRIPT_DIR/filters.sh"
 . "$SCRIPT_DIR/search.sh"
 . "$SCRIPT_DIR/misc.sh"
@@ -74,7 +76,7 @@ main_menu() {
 | . \| | | | | (_| | |  __/ | |  __/ || (__| | | |
 |_|\_\_|_| |_|\__,_|_|\___|_|  \___|\__\___|_| |_|
                                                 
-$(load_version) | https://github.com/joelstitch/KindleFetch
+$(load_version) | https://github.com/jokot/KindleFetch
 "
         if $UPDATE_AVAILABLE; then
             echo "Update available! Select option 6 to install."

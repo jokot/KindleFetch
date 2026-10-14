@@ -100,6 +100,10 @@ search_report_failure() {
             echo "No results returned for '$q'."
             echo "Libgen mirrors answer inconsistently, so searching again often works."
             ;;
+        no-match)
+            echo "No results returned for '$q'."
+            echo "Try fewer words, or clear the format and language filters."
+            ;;
         *)
             echo "Search failed: $NET_FAIL_STAGE"
             ;;
@@ -132,26 +136,38 @@ search_books() {
     local html_file="$TMP_DIR/.kf_search.$$"
     local source_kind=""
 
-    # Libgen first: it is the only one of the three sources that answers curl
-    # with real content. Anna's Archive returns 403 (DDoS-Guard) on /search from
-    # every known mirror, even though its homepage answers 200 - which is what
+    # Z-Library's app API first: its website is behind DiamWall, but /eapi/
+    # answers curl with JSON. Then Libgen, which serves plain HTML when it is
+    # up. Anna's Archive last - it returns 403 (DDoS-Guard) on /search from
+    # every known mirror, even though its homepage answers 200, which is what
     # made this look like "no results" rather than a network failure.
-    if lgli_search "$encoded_query" "$page" "$html_file"; then
-        source_kind="lgli"
-        # lgli_search sets LGLI_URL to whichever mirror answered; remember it so
-        # the next launch starts from a host known to have worked.
+    if zlib_search "$query" "$html_file"; then
+        source_kind="zlib"
+        # zlib_search sets ZLIB_URL to whichever mirror answered; remember it.
         save_config
-    elif [ -n "$ANNAS_URL" ]; then
-        # A long shot while the block is in place, but it costs one request and
-        # means the app starts working again by itself if that ever changes.
-        echo "Libgen returned nothing; trying Anna's Archive..."
-        if http_fetch "$html_file" \
-                "$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}" --max-time 12 \
-           && ! is_junk_response "$html_file" \
-           && grep -Fq 'href="/md5/' "$html_file" 2>/dev/null; then
-            source_kind="annas"
-        elif [ -z "$NET_FAIL_STAGE" ]; then
-            NET_FAIL_STAGE="challenge"
+    elif [ "$NET_FAIL_STAGE" = "no-match" ]; then
+        # Z-Library answered and has nothing. Its catalogue already includes
+        # Libgen's, so the fallbacks would only add their timeouts.
+        :
+    else
+        echo "Z-Library returned nothing; trying Libgen..."
+        if lgli_search "$encoded_query" "$page" "$html_file"; then
+            source_kind="lgli"
+            # lgli_search sets LGLI_URL to whichever mirror answered; remember it so
+            # the next launch starts from a host known to have worked.
+            save_config
+        elif [ -n "$ANNAS_URL" ]; then
+            # A long shot while the block is in place, but it costs one request and
+            # means the app starts working again by itself if that ever changes.
+            echo "Libgen returned nothing; trying Anna's Archive..."
+            if http_fetch "$html_file" \
+                    "$ANNAS_URL/search?page=${page}&q=${encoded_query}${filters}" --max-time 12 \
+               && ! is_junk_response "$html_file" \
+               && grep -Fq 'href="/md5/' "$html_file" 2>/dev/null; then
+                source_kind="annas"
+            elif [ -z "$NET_FAIL_STAGE" ]; then
+                NET_FAIL_STAGE="challenge"
+            fi
         fi
     fi
 
@@ -160,24 +176,11 @@ search_books() {
         search_report_failure "$query"
         return 1
     fi
-    
-    local last_page
-    last_page="$(lgli_last_page "$html_file")"
-    
-    local has_prev=false
-    [ "$page" -gt 1 ] && has_prev=true
-    
-    local has_next=false
-    [ "$page" -lt "$last_page" ] && has_next=true
 
-    echo "$query" > "$TMP_DIR"/last_search_query
-    echo "$page" > "$TMP_DIR"/last_search_page
-    echo "$last_page" > "$TMP_DIR"/last_search_last_page
-    echo "$has_next" > "$TMP_DIR"/last_search_has_next
-    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
-    
     local books
-    if [ "$source_kind" = "lgli" ]; then
+    if [ "$source_kind" = "zlib" ]; then
+        books="$(zlib_parse_results "$html_file")"
+    elif [ "$source_kind" = "lgli" ]; then
         books="$(lgli_parse_results "$html_file" "$LGLI_URL")"
     else
         # Reading from the file rather than `echo $html_content`: unquoted, that
@@ -267,8 +270,31 @@ search_books() {
         }' "$html_file")"
     fi
 
+    local last_page
+    if [ "$source_kind" = "zlib" ]; then
+        # One request returned every result, so the page count is ours to work
+        # out from what was parsed.
+        local result_count="$(echo "$books" | grep -o '"title":' | wc -l)"
+        last_page=$(( (result_count + RESULTS_PER_PAGE - 1) / RESULTS_PER_PAGE ))
+        [ "$last_page" -lt 1 ] && last_page=1
+    else
+        last_page="$(lgli_last_page "$html_file")"
+    fi
+
     rm -f "$html_file"
-    
+
+    local has_prev=false
+    [ "$page" -gt 1 ] && has_prev=true
+
+    local has_next=false
+    [ "$page" -lt "$last_page" ] && has_next=true
+
+    echo "$query" > "$TMP_DIR"/last_search_query
+    echo "$page" > "$TMP_DIR"/last_search_page
+    echo "$last_page" > "$TMP_DIR"/last_search_last_page
+    echo "$has_next" > "$TMP_DIR"/last_search_has_next
+    echo "$has_prev" > "$TMP_DIR"/last_search_has_prev
+
     echo "$books" > "$TMP_DIR"/search_results.json
 
     while true; do
@@ -363,6 +389,13 @@ search_books() {
                         # record, which no Libgen record ever contains - so no
                         # result could reach a downloader at all.
                         case "$book_info" in
+                            *'"source": "zlib"'*)
+                                zlib_available=true
+                                # The record carries its md5 too, so Libgen can
+                                # serve it when it is up - useful once the daily
+                                # Z-Library download limit is spent.
+                                lgli_available=true
+                                ;;
                             *'"source": "lgli"'*)
                                 lgli_available=true
                                 ;;

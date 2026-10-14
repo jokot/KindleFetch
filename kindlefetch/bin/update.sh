@@ -10,7 +10,7 @@ update() {
             # Raw GitHub rather than Pages: the fork has no Pages site, and a
             # Pages URL would mean this fork reinstalls upstream's code.
             if curl -s --max-time 120 -A "$USER_AGENT" \
-                    https://raw.githubusercontent.com/joelstitch/KindleFetch/main/install.sh | sh; then
+                    https://raw.githubusercontent.com/jokot/KindleFetch/main/install.sh | sh; then
                 echo "Update installed successfully!"
                 UPDATE_AVAILABLE=false
                 VERSION=$(load_version)

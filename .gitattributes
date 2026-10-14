@@ -1,0 +1,2 @@
+# Shell scripts run on the Kindle; a CRLF breaks every line.
+* text=auto eol=lf

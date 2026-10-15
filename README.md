@@ -7,6 +7,8 @@
 
 Simple CLI for downloading books from Anna's Archive directly to your Kindle without a computer.
 
+> **Not jailbroken, or prefer your computer?** [KindleFetch for PC](pc/README.md) runs on Windows and macOS and copies books to a Kindle plugged in by USB.
+
 ## Prerequisites
 **Your Kindle must be jailbroken before proceeding!**  
 If it's not, follow [this guide](https://kindlemodding.org/) first.

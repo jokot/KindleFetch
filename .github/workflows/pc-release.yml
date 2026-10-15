@@ -1,0 +1,57 @@
+# Builds KindleFetch for PC and publishes it as a GitHub release.
+#
+# Triggered by pushing a tag such as pc-v1.0.0. The installers in pc/ look
+# for the newest pc-v* release, so tags for the Kindle side never collide.
+name: PC release
+
+on:
+  push:
+    tags: ["pc-v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: pc/go.mod
+          cache-dependency-path: pc/go.sum
+
+      - name: Test
+        working-directory: pc
+        run: go test ./...
+
+      - name: Build
+        working-directory: pc
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          mkdir -p dist
+          for target in windows/amd64 windows/arm64 darwin/amd64 darwin/arm64 linux/amd64 linux/arm64; do
+            os="${target%/*}"; arch="${target#*/}"
+            ext=""; [ "$os" = windows ] && ext=".exe"
+            GOOS="$os" GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X main.version=${GITHUB_REF_NAME}" \
+              -o "dist/kindlefetch-${os}-${arch}${ext}" .
+          done
+          cd dist && sha256sum kindlefetch-* > SHA256SUMS && cat SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" pc/dist/* \
+            --title "KindleFetch for PC ${GITHUB_REF_NAME#pc-}" \
+            --notes "Install on Windows (PowerShell):
+          \`\`\`
+          irm https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/pc/install.ps1 | iex
+          \`\`\`
+          Install on macOS (Terminal):
+          \`\`\`
+          curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/pc/install.sh | sh
+          \`\`\`"

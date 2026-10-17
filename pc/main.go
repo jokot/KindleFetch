@@ -73,6 +73,14 @@ func main() {
 		case "--diagnostics":
 			runDiagnostics(loadConfig())
 			return
+		case "--rename":
+			// kindlefetch --rename [folder or file]; the download folder by default.
+			path := strings.Join(os.Args[2:], " ")
+			if path == "" {
+				path = loadConfig().DownloadDir
+			}
+			renameFlow(cleanDroppedPath(path))
+			return
 		}
 	}
 
@@ -93,7 +101,8 @@ func main() {
 		fmt.Println("2. Filter search results" + filterSummary(cfg))
 		fmt.Println("3. List my books")
 		fmt.Println("4. Send books to Kindle (USB)")
-		fmt.Println("5. Settings")
+		fmt.Println("5. Rename book files")
+		fmt.Println("6. Settings")
 		fmt.Println("q. Exit")
 		fmt.Println()
 
@@ -107,6 +116,8 @@ func main() {
 		case "4":
 			sendAllMenu(cfg)
 		case "5":
+			renameMenu(cfg)
+		case "6":
 			settingsMenu(cfg)
 		case "q":
 			return

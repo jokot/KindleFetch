@@ -111,8 +111,9 @@ func TestFileName(t *testing.T) {
 		want string
 	}{
 		{Book{Title: "Dune", Author: "Frank Herbert", Ext: "epub"}, "Dune - Frank Herbert.epub"},
-		{Book{Title: `What: a "test"? <yes>/no`, Ext: "PDF"}, "What_ a _test__ _yes__no.pdf"},
+		{Book{Title: `What: a "test"? <yes>/no`, Ext: "PDF"}, "What - a test yes no.pdf"},
 		{Book{Title: "Trailing dots...", Ext: "epub"}, "Trailing dots.epub"},
+		{Book{Title: " - Dashes - ", Author: "A", Ext: "epub"}, "Dashes - A.epub"},
 		{Book{Title: "Man's Search for Meaning", Author: "Viktor E. Frankl; Harold S. Kushner; William J. Winslade", Ext: "epub"},
 			"Man's Search for Meaning - Viktor E. Frankl.epub"},
 		{Book{Title: "", Ext: ""}, "book.bin"},
@@ -123,7 +124,7 @@ func TestFileName(t *testing.T) {
 		}
 	}
 	long := Book{Title: strings.Repeat("a", 300), Ext: "epub"}
-	if n := len([]rune(long.fileName())); n > 130 {
+	if n := len([]rune(long.fileName())); n > 155 {
 		t.Errorf("long name not capped: %d", n)
 	}
 }

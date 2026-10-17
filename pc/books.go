@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"unicode"
 )
@@ -44,16 +45,15 @@ func (b Book) Summary() string {
 // "(z-library.sk, 1lib.sk, z-lib.sk)" suffix, so the name is built from the
 // record instead.
 func (b Book) fileName() string {
-	name := b.Title
-	if b.Author != "" {
-		author := b.Author
-		// Long multi-author strings make unwieldy file names; keep the first.
-		if i := strings.IndexAny(author, ";,"); i > 0 && len(author) > 40 {
-			author = author[:i]
-		}
-		name += " - " + author
+	name := sanitizeFileName(b.Title)
+	author := b.Author
+	// Long multi-author strings make unwieldy file names; keep the first.
+	if i := strings.IndexAny(author, ";,"); i > 0 && len(author) > 40 {
+		author = author[:i]
 	}
-	name = sanitizeFileName(name)
+	if author = sanitizeFileName(author); author != "" && name != "" {
+		name = sanitizeFileName(name + " - " + author)
+	}
 	if name == "" {
 		name = "book"
 	}
@@ -64,24 +64,25 @@ func (b Book) fileName() string {
 	return name + "." + ext
 }
 
+var colonRun = regexp.MustCompile(`\s*:\s*`)
+
 // sanitizeFileName removes what Windows, macOS or the Kindle's FAT32 volume
 // would reject, and caps the length so the full path stays well clear of
-// Windows' 260-character limit.
+// Windows' 260-character limit. A colon becomes " - " ("Dune: Messiah" ->
+// "Dune - Messiah"); the same rule names downloads and renamed files.
 func sanitizeFileName(s string) string {
+	s = colonRun.ReplaceAllString(s, " - ")
 	s = strings.Map(func(r rune) rune {
-		switch {
-		case strings.ContainsRune(`<>:"/\|?*`, r):
-			return '_'
-		case unicode.IsControl(r):
-			return -1
+		if strings.ContainsRune(`<>"/\|?*`, r) || unicode.IsControl(r) {
+			return ' '
 		}
 		return r
 	}, s)
 	s = strings.Join(strings.Fields(s), " ")
-	if r := []rune(s); len(r) > 120 {
-		s = strings.TrimSpace(string(r[:120]))
+	if r := []rune(s); len(r) > 150 {
+		s = string(r[:150])
 	}
-	return strings.TrimRight(s, ". ")
+	return strings.Trim(s, " .-")
 }
 
 // downloadBook fetches b from the given source into dir and returns its path.
@@ -135,6 +136,8 @@ var bookExts = map[string]bool{
 }
 
 // listBooks returns the book files directly inside dir, sorted by name.
+// Dotfiles are skipped: macOS leaves "._Book.epub" companions on FAT volumes
+// such as the Kindle.
 func listBooks(dir string) []string {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -142,7 +145,7 @@ func listBooks(dir string) []string {
 	}
 	var out []string
 	for _, e := range entries {
-		if !e.IsDir() && bookExts[strings.ToLower(filepath.Ext(e.Name()))] {
+		if !e.IsDir() && !strings.HasPrefix(e.Name(), ".") && bookExts[strings.ToLower(filepath.Ext(e.Name()))] {
 			out = append(out, filepath.Join(dir, e.Name()))
 		}
 	}

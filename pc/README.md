@@ -34,7 +34,8 @@ Run the install command again at any time to update.
 2. Filter search results
 3. List my books
 4. Send books to Kindle (USB)
-5. Settings
+5. Rename book files
+6. Settings
 ```
 
 - **Search** uses Z-Library's app API, which is not behind the website's
@@ -49,6 +50,22 @@ Run the install command again at any time to update.
   books you already have. Eject the Kindle before unplugging it. Newer Kindles
   that connect over MTP rather than as a drive are not supported; use Amazon's
   Send to Kindle for those.
+- **Rename book files** tidies the names of books in any folder, not only
+  ones KindleFetch downloaded (it uses the same rule as KindleDeDRM):
+  - Each EPUB is named `Title - Author.epub` from the title and author stored
+    inside it. Several authors are joined with ` & `; translators, editors and
+    Calibre's placeholder author "Unknown" are left out.
+  - Other formats, and EPUBs with no title inside, keep their current name with
+    symbols and Z-Library's `(z-library.sk, 1lib.sk, z-lib.sk)` tag removed.
+  - `:` becomes ` - `, and characters Windows or the Kindle don't allow are
+    removed.
+  - You see a preview first, and nothing changes until you confirm. Existing
+    files are never overwritten: a clashing name gets ` (2)`. A Kindle or
+    KOReader `.sdr` folder (reading position, highlights) is renamed with its
+    book.
+  - Press Enter for your download folder, or drag any folder or book into the
+    window. This works on the Kindle's `documents` folder too. From a
+    terminal: `kindlefetch --rename [folder or file]`.
 - **Settings > Network diagnostics** shows which mirrors work from your
   connection.
 

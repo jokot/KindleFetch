@@ -126,12 +126,15 @@ func libgenSearch(cfg *Config, query string, page int) ([]Book, int, error) {
 
 func filterBooks(books []Book, cfg *Config) []Book {
 	out := books[:0]
-	lang := zlibLanguage(cfg.LanguageFilter)
+	langs := map[string]bool{}
+	for _, l := range cfg.languages() {
+		langs[zlibLanguage(l)] = true
+	}
 	for _, b := range books {
 		if cfg.FormatFilter != "" && !strings.EqualFold(b.Ext, cfg.FormatFilter) {
 			continue
 		}
-		if lang != "" && !strings.EqualFold(b.Language, lang) {
+		if len(langs) > 0 && !langs[strings.ToLower(b.Language)] {
 			continue
 		}
 		out = append(out, b)

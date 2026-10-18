@@ -121,8 +121,8 @@ func zlibSearchOn(cfg *Config, candidates []string, query string, page int) ([]B
 	if cfg.FormatFilter != "" {
 		form.Add("extensions[]", cfg.FormatFilter)
 	}
-	if lang := zlibLanguage(cfg.LanguageFilter); lang != "" {
-		form.Add("languages[]", lang)
+	for _, l := range cfg.languages() {
+		form.Add("languages[]", zlibLanguage(l))
 	}
 
 	var last error = &failStage{Stage: "empty"}

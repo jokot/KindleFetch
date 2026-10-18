@@ -103,6 +103,33 @@ func TestFilterBooks(t *testing.T) {
 	if got := filterBooks(books, cfg); len(got) != 1 || got[0].Language != "English" {
 		t.Errorf("got %+v", got)
 	}
+
+	books = []Book{{Language: "English"}, {Language: "Indonesian"}, {Language: "Russian"}, {Language: "korean"}}
+	cfg = &Config{LanguageFilter: "en, id,Korean"}
+	if got := filterBooks(books, cfg); len(got) != 3 || got[2].Language != "korean" {
+		t.Errorf("several languages: %+v", got)
+	}
+}
+
+func TestParseLanguages(t *testing.T) {
+	langs := []string{"en", "id", "es"}
+	cases := map[string]string{
+		"1 2":          "en,id",
+		"en, id":       "en,id",
+		"2,1,2 Korean": "id,en,korean",
+		"1 en":         "en",
+		"9 3":          "es",
+		"1 0":          "",
+	}
+	for in, want := range cases {
+		if got := parseLanguages(in, langs); got != want {
+			t.Errorf("%q: got %q want %q", in, got, want)
+		}
+	}
+	// A filter saved by 1.1.0 holds a single code and must keep working.
+	if got := (&Config{LanguageFilter: "id"}).languages(); len(got) != 1 || got[0] != "id" {
+		t.Errorf("old config: %v", got)
+	}
 }
 
 func TestFileName(t *testing.T) {

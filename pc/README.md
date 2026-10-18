@@ -41,6 +41,9 @@ Run the install command again at any time to update.
 - **Search** uses Z-Library's app API, which is not behind the website's
   browser challenge, and falls back to Libgen. Anna's Archive is not used: its
   search is behind DDoS-Guard for every non-browser client.
+- **Filter search results** limits results to one format and one or more
+  languages: pick several at once by number or code, such as `1 2` or
+  `en, id, korean`. `0` clears the language filter.
 - **Downloading from Z-Library** needs a free account; log in under Settings.
   Free accounts have a daily download limit.
 - Books are saved to `Downloads/KindleFetch` (changeable in Settings) and named

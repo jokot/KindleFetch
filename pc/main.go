@@ -130,9 +130,7 @@ func filterSummary(cfg *Config) string {
 	if cfg.FormatFilter != "" {
 		f = append(f, cfg.FormatFilter)
 	}
-	if cfg.LanguageFilter != "" {
-		f = append(f, cfg.LanguageFilter)
-	}
+	f = append(f, cfg.languages()...)
 	if len(f) == 0 {
 		return ""
 	}
@@ -402,14 +400,14 @@ func filtersMenu(cfg *Config) {
 		fmt.Println("Filters")
 		fmt.Println()
 		fmt.Printf("1. Format:   %s\n", orAny(cfg.FormatFilter))
-		fmt.Printf("2. Language: %s\n", orAny(cfg.LanguageFilter))
+		fmt.Printf("2. Language: %s\n", orAny(strings.Join(cfg.languages(), ", ")))
 		fmt.Println("3. Clear all filters")
 		fmt.Println("q. Back")
 		switch strings.ToLower(prompt("\nChoose option: ")) {
 		case "1":
-			cfg.FormatFilter = pickFrom("Format", formats, false)
+			cfg.FormatFilter = pickFrom("Format", formats)
 		case "2":
-			cfg.LanguageFilter = pickFrom("Language", langs, true)
+			cfg.LanguageFilter = pickLanguages(langs, cfg.LanguageFilter)
 		case "3":
 			cfg.FormatFilter, cfg.LanguageFilter = "", ""
 		case "q", "":
@@ -427,25 +425,48 @@ func orAny(s string) string {
 	return s
 }
 
-func pickFrom(label string, options []string, custom bool) string {
+// pickLanguages asks for one or more languages and returns them as a comma
+// list ("" = any). Enter keeps the current choice.
+func pickLanguages(options []string, current string) string {
 	fmt.Println()
 	for i, o := range options {
 		fmt.Printf("%d) %s  ", i+1, o)
 	}
 	fmt.Println("\n0) Any")
-	hint := ""
-	if custom {
-		hint = " (or type a language name/code)"
+	fmt.Println("Pick one or more: numbers or codes/names, e.g. '1 2' or 'en, id, korean'.")
+	a := prompt("Languages (Enter = keep): ")
+	if a == "" {
+		return current
 	}
-	a := strings.ToLower(prompt(label + hint + ": "))
-	if n, err := strconv.Atoi(a); err == nil {
-		if n >= 1 && n <= len(options) {
-			return options[n-1]
+	return parseLanguages(a, options)
+}
+
+// parseLanguages turns "1 2 korean" into "en,id,korean"; any "0" means any
+// language. Numbers outside the list are ignored.
+func parseLanguages(answer string, options []string) string {
+	var out []string
+	for _, f := range splitList(answer) {
+		n, err := strconv.Atoi(f)
+		switch {
+		case err != nil:
+			out = append(out, f)
+		case n == 0:
+			return ""
+		case n >= 1 && n <= len(options):
+			out = append(out, options[n-1])
 		}
-		return ""
 	}
-	if custom {
-		return a
+	return strings.Join(splitList(strings.Join(out, ",")), ",")
+}
+
+func pickFrom(label string, options []string) string {
+	fmt.Println()
+	for i, o := range options {
+		fmt.Printf("%d) %s  ", i+1, o)
+	}
+	fmt.Println("\n0) Any")
+	if n, err := strconv.Atoi(prompt(label + ": ")); err == nil && n >= 1 && n <= len(options) {
+		return options[n-1]
 	}
 	return ""
 }

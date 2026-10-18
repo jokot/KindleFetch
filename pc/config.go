@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 var defaultZlibMirrors = []string{
@@ -30,7 +31,8 @@ type Config struct {
 	ZlibCookies map[string]string `json:"zlib_cookies,omitempty"`
 	LibgenURL   string            `json:"libgen_url"`
 
-	FormatFilter   string `json:"format_filter,omitempty"`
+	FormatFilter string `json:"format_filter,omitempty"`
+	// Language codes or names separated by commas, e.g. "en,id".
 	LanguageFilter string `json:"language_filter,omitempty"`
 
 	path string
@@ -82,6 +84,24 @@ func (c *Config) save() error {
 		return err
 	}
 	return os.WriteFile(c.path, b, 0o600)
+}
+
+// languages returns the language filter as a list, without duplicates.
+func (c *Config) languages() []string {
+	return splitList(c.LanguageFilter)
+}
+
+// splitList splits on commas and spaces, lower-cases and drops duplicates.
+func splitList(s string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range strings.FieldsFunc(strings.ToLower(s), func(r rune) bool { return r == ',' || r == ' ' || r == ';' }) {
+		if !seen[f] {
+			seen[f] = true
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // mirrors returns the preferred mirror followed by the rest of the defaults.

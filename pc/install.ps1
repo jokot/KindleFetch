@@ -67,7 +67,13 @@ try {
     }
 
     New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
+    # A running exe cannot be overwritten, but it can be renamed: move the old
+    # one aside so updating works while KindleFetch is open.
+    $old = "$Exe.old"
+    Remove-Item -Force $old -ErrorAction SilentlyContinue
+    if (Test-Path $Exe) { Move-Item -Force $Exe $old }
     Move-Item -Force $dl $Exe
+    Remove-Item -Force $old -ErrorAction SilentlyContinue
 } finally {
     Remove-Item -Recurse -Force $tmp -ErrorAction SilentlyContinue
 }
